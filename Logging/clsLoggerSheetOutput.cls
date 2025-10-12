@@ -23,15 +23,23 @@ Private mdlnameIdx_ As Integer
 Private messageIdx_ As Integer
 Private logFormat_ As String
 Private logTimeFormat_ As String
+Private useModuleName_ As Boolean
 Private sheetlogType_  As LogType
 Private sheetMaxRowSize_ As Long
+Private enableClearLogOnInit_ As Boolean
 Private targetLogArea_ As Range
 
-Public Sub Init(ByVal ws As Worksheet, ByVal logStartRow As Long, ByVal logStartCol As Long, sheetLogType As LogType, maxLogSize As Long)
+Public Sub Init(ByVal ws As Worksheet, ByVal logStartRow As Long, ByVal logStartCol As Long, sheetLogType As LogType, Optional maxLogSize As Long = 10000000, Optional useModuleName As Boolean = False)
     Set targetSheet_ = ws
     currentRow_ = logStartRow
     sheetMaxRowSize_ = maxLogSize
     sheetlogType_ = sheetLogType
+    useModuleName_ = useModuleName
+    currentIdx_ = -1
+    lgLevelIdx_ = -1
+    mdlnameIdx_ = -1
+    messageIdx_ = -1
+    
     Set targetLogArea_ = ws.Range(ws.Cells(logStartRow, logStartCol), ws.Cells(logStartRow + maxLogSize, logStartCol + 4))
     
     If sheetLogType = SheetLogSimple Then
@@ -40,13 +48,19 @@ Public Sub Init(ByVal ws As Worksheet, ByVal logStartRow As Long, ByVal logStart
         Call initSheetCol(logStartCol)
         ws.Range(ws.Cells(logStartRow, currentCol_), ws.Cells(logStartRow + maxLogSize, currentCol_)).NumberFormatLocal = logTimeFormat_
     End If
+    If enableClearLogOnInit_ Then
+        targetLogArea_.ClearContents
+    End If
 End Sub
 
 Private Sub initSheetCol(logStartCol As Long)
     Dim logArray() As String
     Dim i As Integer
+    If Not useModuleName_ Then
+        logFormat_ = Replace(logFormat_, "{module}", "")
+    End If
     logArray = Split(logFormat_, "\t")
-    For i = 0 To 3
+    For i = 0 To UBound(logArray)
         If InStr(logArray(i), "{time}") > 0 Then
             currentCol_ = logStartCol + i
             currentIdx_ = i
@@ -55,7 +69,7 @@ Private Sub initSheetCol(logStartCol As Long)
             lgLevelCol_ = logStartCol + i
             lgLevelIdx_ = i
         End If
-        If InStr(logArray(i), "{module}") > 0 Then
+        If useModuleName_ And InStr(logArray(i), "{module}") > 0 Then
             mdlnameCol_ = logStartCol + i
             mdlnameIdx_ = i
         End If
@@ -82,10 +96,10 @@ Private Sub ILoggerOutput_OutputLogMsg(ByVal message As String)
     ElseIf sheetlogType_ = SheetLogFormatted Then
         Dim logArray() As String
         logArray = Split(message, "\t")
-        targetSheet_.Cells(currentRow_, currentCol_).Value = logArray(currentIdx_)
-        targetSheet_.Cells(currentRow_, lgLevelCol_).Value = logArray(lgLevelIdx_)
-        targetSheet_.Cells(currentRow_, mdlnameCol_).Value = logArray(mdlnameIdx_)
-        targetSheet_.Cells(currentRow_, messageCol_).Value = logArray(messageIdx_)
+        If currentIdx_ >= 0 Then targetSheet_.Cells(currentRow_, currentCol_).Value = logArray(currentIdx_)
+        If lgLevelIdx_ >= 0 Then targetSheet_.Cells(currentRow_, lgLevelCol_).Value = logArray(lgLevelIdx_)
+        If mdlnameIdx_ >= 0 Then targetSheet_.Cells(currentRow_, mdlnameCol_).Value = logArray(mdlnameIdx_)
+        If messageIdx_ >= 0 Then targetSheet_.Cells(currentRow_, messageCol_).Value = logArray(messageIdx_)
         
     End If
     currentRow_ = currentRow_ + 1
@@ -117,4 +131,8 @@ End Property
 
 Public Property Get LogType() As LogType
     LogType = sheetlogType_
+End Property
+
+Public Property Let EnableClearLogOnInit(flag As Boolean)
+    EnableClearLogOnInit = flag
 End Property

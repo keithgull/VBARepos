@@ -62,7 +62,7 @@ Private outputHandler As iLoggerOutput
 Private logLevels As Scripting.Dictionary
 Private formatTemplate_ As String
 Private timeFormat_ As String
-Private useModuleName As Boolean
+Private useModuleName_ As Boolean
 Private moduleNameLen As Integer
 
 Private Sub Class_Initialize()
@@ -73,7 +73,7 @@ Private Sub Class_Initialize()
     logLevels.Add LOGLEVEL_WARN, True
     logLevels.Add LOGLEVEL_ERROR, True
     logLevels.Add LOGLEVEL_TRACE, False
-    useModuleName = False
+    useModuleName_ = False
 End Sub
 
 ' シングルトン取得
@@ -85,19 +85,21 @@ Public Function GetLogger() As clsLogger
 End Function
 
 ' 出力先の初期化
-Public Sub InitializeLogger(ByVal loggerType As LOGGER_TYPE, ByVal param1 As String, ByVal param2 As String, param3 As LogType, maxLogSize As Long)
+Public Sub InitializeLogger(ByVal loggerType As LOGGER_TYPE, ByVal param1 As String, ByVal param2 As String, param3 As LogType, Optional maxLogSize As Long = 10000000, Optional useModuleName As Boolean = False)
     Select Case loggerType
         Case LOGGER_TYPE_DEBUGPRINT
             Dim dlog As New clsLoggerDebugPrintOutput
-            dlog.LogFormat = FILE_LOG_FORMAT_DEFAULT
+            dlog.LogFormat = FILE_LOG_FORMAT_WITHOUT_MODULENAME
+            useModuleName_ = useModuleName
             Set outputHandler = dlog
 
         Case LOGGER_TYPE_LOGFILE
             Dim flog As New clsLoggerFileOutput
             Dim logFileName As String
-            flog.LogFormat = FILE_LOG_FORMAT_DEFAULT
+            flog.LogFormat = FILE_LOG_FORMAT_WITHOUT_MODULENAME
             logFileName = GetLogFileName(param3, param2)
             flog.Init param1, logFileName, param3, maxLogSize
+            
             Set outputHandler = flog
 
         Case LOGGER_TYPE_LOGSHEET
@@ -111,7 +113,7 @@ Public Sub InitializeLogger(ByVal loggerType As LOGGER_TYPE, ByVal param1 As Str
             Dim col As Long, row As Long
             col = Range(param2).Column
             row = Range(param2).row
-            slog.LogFormat = SHEET_LOG_FORMAT_DEFAULT
+            slog.LogFormat = SHEET_LOG_FORMAT_WITHOUT_MODULENAME
             slog.TimeFormat = ("yyyy/MM/dd hh:mm:ss.000")
             slog.Init ws, col, row, param3, maxLogSize
             Set outputHandler = slog
@@ -250,7 +252,7 @@ Private Sub OutputLog(ByVal level As String, ByVal moduleName As String, ByVal m
     formatted = outputHandler.LogFormat
     formatted = Replace(formatted, "{time}", GetPreciseTime("-"))
     formatted = Replace(formatted, "{level}", paddedLevel)
-    formatted = Replace(formatted, "{module}", moduleName)
+    formatted = IIf(useModuleName_, Replace(formatted, "{module}", moduleName), formatted)
     formatted = Replace(formatted, "{message}", message)
 
     If Not outputHandler Is Nothing Then

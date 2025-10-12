@@ -25,3 +25,7 @@ End Enum
 
 Public Const FILE_LOG_FORMAT_DEFAULT As String = "{time} {level} {module} {message}"
 Public Const SHEET_LOG_FORMAT_DEFAULT As String = "{time}\t{level}\t{module}\t{message}"
+
+Public Const FILE_LOG_FORMAT_WITHOUT_MODULENAME As String = "{time} {level} {message}"
+Public Const SHEET_LOG_FORMAT_WITHOUT_MODULENAME As String = "{time}\t{level}\t{message}"
+

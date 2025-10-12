@@ -15,18 +15,20 @@ Private logFilePath_ As String
 Private logPath_ As String
 Private logFile_ As String
 Private maxLogSize_ As Long
+Private useModuleName_ As Boolean
 Private logFileCount_ As Integer
 Private fileLogType_ As LogType
 Private logFormat_  As String
 Private startLogTime_ As String
 
-Public Sub Init(ByVal path As String, ByVal fileName As String, fileLogType As LogType, Optional maxLogSize As Long)
+Public Sub Init(ByVal path As String, ByVal fileName As String, fileLogType As LogType, Optional maxLogSize As Long = 10000000, Optional useModuleName As Boolean = False)
     If Right(path, 1) <> "\" Then
         path = path & "\"
     End If
     maxLogSize_ = maxLogSize
     logFileCount_ = 0
     fileLogType_ = fileLogType
+    useModuleName_ = useModuleName
     logPath_ = path
     logFile_ = fileName
     logFilePath_ = path & fileName
