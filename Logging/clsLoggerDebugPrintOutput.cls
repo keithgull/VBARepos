@@ -11,7 +11,30 @@ Attribute VB_Exposed = False
 Option Explicit
 Implements iLoggerOutput
 
-Private Sub ILoggerOutput_OutputLog(ByVal message As String)
+Private logFormat_ As String
+
+Private Sub ILoggerOutput_OutputLog(ByVal timestamp As String, ByVal level As String, ByVal moduleName As String, ByVal message As String)
+    ILoggerOutput_OutputLogMsg timestamp & " " & level & " " & IIf(moduleName <> "", moduleName & " ", "") & message
+End Sub
+
+Private Sub ILoggerOutput_OutputLogMsg(ByVal message As String)
     Debug.Print message
 End Sub
 
+Private Sub ILoggerOutput_ClearLog(ByVal target As String)
+     Debug.Print String(200, vbCrLf)
+     Debug.Print String(200, Chr(8))
+End Sub
+
+Private Property Let ILoggerOutput_LogFormat(formatStr As String)
+    logFormat_ = formatStr
+End Property
+
+Private Property Get ILoggerOutput_LogFormat() As String
+    ILoggerOutput_LogFormat = logFormat_
+End Property
+
+
+Public Property Let LogFormat(formatStr As String)
+    logFormat_ = formatStr
+End Property

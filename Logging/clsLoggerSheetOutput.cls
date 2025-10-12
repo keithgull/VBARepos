@@ -11,18 +11,110 @@ Attribute VB_Exposed = False
 Option Explicit
 Implements iLoggerOutput
 
-Private targetSheet As Worksheet
-Private currentRow As Long
-Private currentCol As Long
+Private targetSheet_ As Worksheet
+Private currentRow_ As Long
+Private currentCol_ As Long
+Private lgLevelCol_ As Long
+Private mdlnameCol_ As Long
+Private messageCol_ As Long
+Private currentIdx_ As Integer
+Private lgLevelIdx_ As Integer
+Private mdlnameIdx_ As Integer
+Private messageIdx_ As Integer
+Private logFormat_ As String
+Private logTimeFormat_ As String
+Private sheetlogType_  As LogType
+Private sheetMaxRowSize_ As Long
+Private targetLogArea_ As Range
 
-Public Sub Init(ByVal ws As Worksheet, ByVal logStartRow As Long, ByVal logStartCol As Long)
-    Set targetSheet = ws
-    currentRow = logStartRow
-    currentCol = logStartCol
+Public Sub Init(ByVal ws As Worksheet, ByVal logStartRow As Long, ByVal logStartCol As Long, sheetLogType As LogType, maxLogSize As Long)
+    Set targetSheet_ = ws
+    currentRow_ = logStartRow
+    sheetMaxRowSize_ = maxLogSize
+    sheetlogType_ = sheetLogType
+    Set targetLogArea_ = ws.Range(ws.Cells(logStartRow, logStartCol), ws.Cells(logStartRow + maxLogSize, logStartCol + 4))
+    
+    If sheetLogType = SheetLogSimple Then
+        currentCol_ = logStartCol
+    ElseIf sheetLogType = SheetLogFormatted Then
+        Call initSheetCol(logStartCol)
+        ws.Range(ws.Cells(logStartRow, currentCol_), ws.Cells(logStartRow + maxLogSize, currentCol_)).NumberFormatLocal = logTimeFormat_
+    End If
 End Sub
 
-Private Sub ILoggerOutput_OutputLog(ByVal message As String)
-    targetSheet.Cells(currentRow, currentCol).Value = message
-    currentRow = currentRow + 1
+Private Sub initSheetCol(logStartCol As Long)
+    Dim logArray() As String
+    Dim i As Integer
+    logArray = Split(logFormat_, "\t")
+    For i = 0 To 3
+        If InStr(logArray(i), "{time}") > 0 Then
+            currentCol_ = logStartCol + i
+            currentIdx_ = i
+        End If
+        If InStr(logArray(i), "{level}") > 0 Then
+            lgLevelCol_ = logStartCol + i
+            lgLevelIdx_ = i
+        End If
+        If InStr(logArray(i), "{module}") > 0 Then
+            mdlnameCol_ = logStartCol + i
+            mdlnameIdx_ = i
+        End If
+        If InStr(logArray(i), "{message}") > 0 Then
+            messageCol_ = logStartCol + i
+            messageIdx_ = i
+        End If
+    Next
 End Sub
 
+
+Private Sub ILoggerOutput_OutputLog(ByVal timestamp As String, ByVal level As String, ByVal moduleName As String, ByVal message As String)
+    If sheetlogType_ = SheetLogSimple Then
+        targetSheet_.Cells(currentRow_, currentCol_).Value = timestamp & " " & level & " " & IIf(moduleName <> "", moduleName & " ", "") & message
+    ElseIf sheetlogType_ = SheetLogFormatted Then
+
+    End If
+End Sub
+
+Private Sub ILoggerOutput_OutputLogMsg(ByVal message As String)
+    
+    If sheetlogType_ = SheetLogSimple Then
+        targetSheet_.Cells(currentRow_, currentCol_).Value = Replace(message, "\t", " ")
+    ElseIf sheetlogType_ = SheetLogFormatted Then
+        Dim logArray() As String
+        logArray = Split(message, "\t")
+        targetSheet_.Cells(currentRow_, currentCol_).Value = logArray(currentIdx_)
+        targetSheet_.Cells(currentRow_, lgLevelCol_).Value = logArray(lgLevelIdx_)
+        targetSheet_.Cells(currentRow_, mdlnameCol_).Value = logArray(mdlnameIdx_)
+        targetSheet_.Cells(currentRow_, messageCol_).Value = logArray(messageIdx_)
+        
+    End If
+    currentRow_ = currentRow_ + 1
+End Sub
+
+Private Sub ILoggerOutput_ClearLog(ByVal target As String)
+    targetSheet_.Range(targetLogArea_).ClearContents
+End Sub
+
+Public Property Let ILoggerOutput_LogFormat(formatStr As String)
+    
+End Property
+
+Public Property Get ILoggerOutput_LogFormat() As String
+    ILoggerOutput_LogFormat = logFormat_
+End Property
+
+Public Property Let LogFormat(formatStr As String)
+    logFormat_ = formatStr
+End Property
+
+Public Property Let TimeFormat(formatStr As String)
+    logTimeFormat_ = formatStr
+End Property
+
+Public Property Let LogType(sLogType As LogType)
+    sheetlogType_ = sLogType
+End Property
+
+Public Property Get LogType() As LogType
+    LogType = sheetlogType_
+End Property

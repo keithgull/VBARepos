@@ -11,16 +11,22 @@ Option Explicit
 
 ' ====== Class Module: Logger ==================
 ' VBA 汎用Logger
+'  依存関係
+'   clsLogger
+'    + iLoggerOutput - clsLoggerDebugPrintOutput    ：debugprint用のロガー
+'    + iLoggerOutput - clsLoggerFileOutput          ：ファイル出力用のロガー
+'    + iLoggerOutput - clsLoggerSheetOutput         ；シート出力用のロガー
+'
 '  使い方
 '    Dim log As New clsLogger
 '
 '    ' Enumを使って初期化
-'    log.InitializeLogger LOGGER_TYPE_DEBUGPRINT, "", ""                        ' Debug.printを使ったログ
-'    ' log.InitializeLogger LOGGER_TYPE_LOGFILE, "C:\Work", "vbalogout.log"     ' ログファイルへ出力するログ
-'    ' log.InitializeLogger LOGGER_TYPE_LOGSHEET, "Sheet1", "C10"               ' シートに出力するログ
+'    log.InitializeLogger LOGGER_TYPE_DEBUGPRINT, "", "", DebugLogNormal, 10                                      ' Debug.printを使ったログ
+'    ' log.InitializeLogger LOGGER_TYPE_LOGFILE, "C:\Work", "vbalogout.log",  FileLogTimeBasedName, 10000000      ' ログファイルへ出力するログ
+'    ' log.InitializeLogger LOGGER_TYPE_LOGSHEET, "Sheet1", "C10", SheetLogFormatted, 100000                      ' シートに出力するログ
 '
-'    log.SetLogLevel LOGLEVEL_DEBUG, True                                       ' ログレベルの個別設定
-'    log.SetLogLevelAll true, true, true, true, true                            ' ログレベルの一括設定（INFO、ERROR、WARN、DEBUG、TRACEの順で出力・非出力を設定）
+'    log.SetLogLevel LOGLEVEL_DEBUG, True                                               ' ログレベルの個別設定
+'    log.SetLogLevelAll true, true, true, true, true                                    ' ログレベルの一括設定（INFO、ERROR、WARN、DEBUG、TRACEの順で出力・非出力を設定）
 '
 '    log.InfoLog "開始"
 '    log.DebugLog "デバッグ情報"
@@ -43,10 +49,19 @@ Private Type SYSTEMTIME
     wMilliseconds As Integer
 End Type
 
+Public Enum LogType
+    DebugLogNormal
+    FileLogFixedLogName
+    FileLogTimeBasedName
+    SheetLogSimple
+    SheetLogFormatted
+End Enum
+
 Private logInstance As clsLogger
 Private outputHandler As iLoggerOutput
 Private logLevels As Scripting.Dictionary
-Private formatTemplate As String
+Private formatTemplate_ As String
+Private timeFormat_ As String
 Private useModuleName As Boolean
 Private moduleNameLen As Integer
 
@@ -58,7 +73,6 @@ Private Sub Class_Initialize()
     logLevels.Add LOGLEVEL_WARN, True
     logLevels.Add LOGLEVEL_ERROR, True
     logLevels.Add LOGLEVEL_TRACE, False
-    formatTemplate = "{time} {level} {module} {message}"
     useModuleName = False
 End Sub
 
@@ -71,15 +85,19 @@ Public Function GetLogger() As clsLogger
 End Function
 
 ' 出力先の初期化
-Public Sub InitializeLogger(ByVal loggerType As LOGGER_TYPE, ByVal param1 As String, ByVal param2 As String)
+Public Sub InitializeLogger(ByVal loggerType As LOGGER_TYPE, ByVal param1 As String, ByVal param2 As String, param3 As LogType, maxLogSize As Long)
     Select Case loggerType
         Case LOGGER_TYPE_DEBUGPRINT
             Dim dlog As New clsLoggerDebugPrintOutput
+            dlog.LogFormat = FILE_LOG_FORMAT_DEFAULT
             Set outputHandler = dlog
 
         Case LOGGER_TYPE_LOGFILE
             Dim flog As New clsLoggerFileOutput
-            flog.Init param1, param2
+            Dim logFileName As String
+            flog.LogFormat = FILE_LOG_FORMAT_DEFAULT
+            logFileName = GetLogFileName(param3, param2)
+            flog.Init param1, logFileName, param3, maxLogSize
             Set outputHandler = flog
 
         Case LOGGER_TYPE_LOGSHEET
@@ -93,13 +111,43 @@ Public Sub InitializeLogger(ByVal loggerType As LOGGER_TYPE, ByVal param1 As Str
             Dim col As Long, row As Long
             col = Range(param2).Column
             row = Range(param2).row
-            slog.Init ws, col, row
+            slog.LogFormat = SHEET_LOG_FORMAT_DEFAULT
+            slog.TimeFormat = ("yyyy/MM/dd hh:mm:ss.000")
+            slog.Init ws, col, row, param3, maxLogSize
             Set outputHandler = slog
 
         Case Else
             Err.Raise vbObjectError + 2, , "不明なログ種別: " & loggerType
     End Select
 End Sub
+
+' logファイル名の作成
+Public Function GetLogFileName(fileLogType As LogType, baseFileName As String) As String
+    Dim logFileName As String
+    Dim dotpos As Integer
+    If fileLogType = FileLogTimeBasedName Then
+        ' 時間ベースのログ・ファイル名の場合
+        Dim logExtension As String
+        dotpos = InStrRev(baseFileName, ".")
+        If dotpos > 0 Then
+            ' 拡張子ありの場合
+            logExtension = Right(baseFileName, Len(baseFileName) - dotpos)
+            logFileName = Left(baseFileName, dotpos - 1) & "_" & Format(Now, "yyyymmdd_hhmm") & "." & logExtension
+        Else
+            ' 拡張子なしの場合
+            logFileName = baseFileName & "_" & Format(Now, "yyyymmdd_hhmm") & ".log"
+        End If
+    ElseIf fileLogType = FileLogFixedLogName Then
+        dotpos = InStrRev(baseFileName, ".")
+        If dotpos > 0 Then
+            logFileName = baseFileName
+        Else
+            logFileName = baseFileName & ".log"
+        End If
+    End If
+    GetLogFileName = logFileName
+End Function
+
 
 Public Sub SetOutput(ByVal handler As iLoggerOutput)
     Set outputHandler = handler
@@ -125,7 +173,7 @@ Public Sub SetUseModuleName(ByVal useFlag As Boolean, Optional nameLen As Intege
 End Sub
 
 Public Sub SetLogFormat(ByVal template As String)
-    formatTemplate = template
+    formatTemplate_ = template
 End Sub
 
 Public Sub log(ByVal level As String, ByVal moduleName As String, ByVal message As String)
@@ -134,13 +182,18 @@ Public Sub log(ByVal level As String, ByVal moduleName As String, ByVal message 
     End If
 
     Dim formatted As String
-    formatted = Replace(formatTemplate, "{time}", Format(Now, "yyyy-mm-dd hh:nn:ss"))
-    formatted = Replace(formatted, "{level}", level)
+    Dim formattedDatetime As String
+    Dim formattedLogLevel As String
+    formattedDatetime = Format(Now, timeFormat_)
+    formattedLogLevel = "[" & Format(level, "@@@@@") & "]" ' 5文字で桁揃え
+    formatted = outputHandler.LogFormat
+    formatted = Replace(formatted, "{time}", formattedDatetime)
+    formatted = Replace(formatted, "{level}", formattedLogLevel)
     formatted = IIf(useModuleName, Replace(formatted, "{module}", moduleName), "")
     formatted = Replace(formatted, "{message}", message)
-
+    
     If Not outputHandler Is Nothing Then
-        outputHandler.OutputLog formatted
+        outputHandler.OutputLogMsg formatted
     End If
 End Sub
 
@@ -194,13 +247,14 @@ Private Sub OutputLog(ByVal level As String, ByVal moduleName As String, ByVal m
     paddedLevel = "[" & Format(level, "@@@@@") & "]" ' 5文字で桁揃え
 
     Dim formatted As String
-    formatted = Replace(formatTemplate, "{time}", GetPreciseTime("-"))
+    formatted = outputHandler.LogFormat
+    formatted = Replace(formatted, "{time}", GetPreciseTime("-"))
     formatted = Replace(formatted, "{level}", paddedLevel)
     formatted = Replace(formatted, "{module}", moduleName)
     formatted = Replace(formatted, "{message}", message)
 
     If Not outputHandler Is Nothing Then
-        outputHandler.OutputLog formatted
+        outputHandler.OutputLogMsg formatted
     End If
 End Sub
 
@@ -216,3 +270,18 @@ Function GetPreciseTime(datedelim As String) As String
                      Format(st.wMilliseconds, "000")
 End Function
 
+Property Let FormatTemplate(formatStr As String)
+    formatTemplate_ = formatStr
+End Property
+
+Property Get FormatTemplate() As String
+    FormatTemplate = formatTemplate_
+End Property
+
+Property Let TimeFormat(formatTimeStr As String)
+    timeFormat_ = formatTimeStr
+End Property
+
+Property Get TimeFormat() As String
+    TimeFormat = timeFormat_
+End Property

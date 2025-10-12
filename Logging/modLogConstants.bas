@@ -22,3 +22,6 @@ Public Enum LOGGER_TYPE
     LOGGER_TYPE_LOGFILE = 1
     LOGGER_TYPE_LOGSHEET = 2
 End Enum
+
+Public Const FILE_LOG_FORMAT_DEFAULT As String = "{time} {level} {module} {message}"
+Public Const SHEET_LOG_FORMAT_DEFAULT As String = "{time}\t{level}\t{module}\t{message}"
